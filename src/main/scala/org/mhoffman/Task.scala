@@ -166,10 +166,8 @@ class Task (val taskDefinition: TaskDefinition) extends Actor {
   // Or does the Actor track the simultaneous executions?
   // Or, perhaps, does a Task actor supervise multiple TaskExecution actors? 
 
-  def receive = {
-     case "test" => log.info("received test")
-     case _ => log.info("received unknown message")
-   }
+  // we start out in "ready for checkout" mode
+  def receive = readyForCheckout
 
 }
 
