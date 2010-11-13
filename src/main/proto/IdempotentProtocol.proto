@@ -1,0 +1,55 @@
+package eip.idempotent;
+
+message EnvelopeProtocol {
+  required int32 id = 1;
+  required int32 frameId = 2;
+  optional PayloadProtocol payload = 3;
+}
+
+message FrameProtocol {
+  required int32 id =1;
+  required int32 size=2;
+  required AddressProtocol returnAddress = 3;
+  required AddressProtocol address = 4;
+  optional int32 count=5;
+}
+
+message AddressProtocol {
+  required string host = 1;
+  required int32 port = 2;
+  required string actor = 3;
+}
+
+message PayloadProtocol {
+  required SerializationSchemeType serializationScheme = 1;
+  required bytes message = 2;
+  optional bytes messageManifest = 3;
+}
+
+message FrameRequestProtocol {
+  required AddressProtocol returnAddress = 1;
+  required AddressProtocol address = 2;
+}
+
+message FrameResponseProtocol {
+  required FrameProtocol frame = 3;
+}
+
+message RepeatFrameRequestProtocol {
+  required FrameProtocol frame = 1;
+  repeated int32 envelope = 3;
+}
+
+message RepeatFrameResponseProtocol {
+  required FrameProtocol frame = 1;
+}
+
+message CompleteFrameRequestProtocol {
+  required FrameProtocol frame = 1;
+}
+
+message CompleteFrameResponseProtocol {
+  required FrameProtocol frame = 1;
+}
+
+
