@@ -8,7 +8,6 @@ import se.scalablesolutions.akka.dispatch.{Dispatchers}
 import se.scalablesolutions.akka.remote.{RemoteClient, RemoteNode}
 import com.eaio.uuid.UUID
 import collection.immutable.{HashMap, Queue}
-import java.util.ArrayList
 
 
 /**
@@ -44,7 +43,7 @@ case class TaskDefinition(
         name: String,
 
         /**Optional, but can describe this task */
-        description: String = name,
+        description: String = "",
 
         /**
          * Currently, this is just the name of a worker.  There are certainly more elegant, typesafe ways to do this --
@@ -64,17 +63,21 @@ case class TaskDefinition(
         properties: Map[String, String] = new HashMap[String, String],
 
         /**
+         * TODO: This doesn't really makes sense; with these default parameters, we can't define both the  parent and 
+         * the children and ensure that they're consistent. 
          * Every task has a parent, but by default the parent will be the root
          */
-        parent: TaskDefinition,
+        // parent: TaskDefinition = TaskDefinition.ROOT,
 
         /**
-         * In case this taskDefinition is defined with  children off-the-bat. We can add them later during runtime.
+         * In case this taskDefinition is defined with children off-the-bat.  If you don't define them up front in the
+         * task definition, they can still be added later during runtime.
          */
-        children: List[TaskDefinition] = new List[TaskDefinition]) {
+        children: List[TaskDefinition] = List()) {
   // that was all the constructor. Yeesh.
 
-  // TODO: Look up the parent as the root if it's null
+  //TODO: make sure that the children all have the current task as the parent.
+  // That's part of the convenience of the builder pattern I guess -- we can do that kind of thing automatically. 
 
 
   /**
@@ -83,6 +86,11 @@ case class TaskDefinition(
   val taskDefinitionId: UUID = new UUID()
 
 }
+
+object TaskDefinition {
+  val ROOT = TaskDefinition("root", "the root task", "no worker")
+}
+
 
 /**
  * A runtime instance of a task, represented by an Akka actor.
@@ -97,7 +105,7 @@ case class TaskDefinition(
  * executions separately, either within this actor or perhaps as linked actors (each current execution getting its own actor).
  * Not sure if there's value in that approach? 
  */
-class Task(val taskDefinition: TaskDefinition) extends Actor {
+class Task (val taskDefinition: TaskDefinition) extends Actor {
 
   /*
    * The lifecycle of a task is potentially circular.  It goes like this:
@@ -112,39 +120,56 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
    */
   
   /**
-   * Add a child task. Only possible when the task is checked out, but we're ensuring that through the "becomes" state-transition construct.
+   * Add a child task.
+   * Right now, this is only possible when the task is checked out -- we're ensuring that through the "becomes" state-transition construct.
+   * Conceptually, I'm not necessarily sure we need this restriction, but I haven't reasoned through all the implications
+   * of adding a child to task that you haven't checked out. 
    */
   def addChild() = {
-
-
+    0
   }
 
   /**
    * When the task is executing, we can add children or mark the task
    */
   def checkedOut(): Receive = {
-    case (checkin)  => // check this task in
-    case (addChild) => // add a new child task
-
+    case ("checkin")  =>  // check this task in
+    // if it's successful, become completed
+    // if it's not successful, become failed
+      log.info("checkin")
+      become(readyForCheckout)
+    
+    case ("addChild") => // add a new child task
+      log.info("adding child")
   }
 
-  def receive = {
-
-  }
-
-  def startTask: Receive = {
+  def readyForCheckout: Receive = {
     // someone is executing the task
-    case ("foo") => become(stopTask)
+    case ("checkout") => 
+      log.info("checkout")
+      become(checkedOut)
+    case _ => throw new RuntimeException("Don't know what to do with message")
   }
 
-  def stopTask: Receive = {
+  def completed: Receive = {
     // the task is now finished.
-    case ("bar") => become(startTask)
+    case ("bar") => become(readyForCheckout)
+    case _ => throw new RuntimeException("Don't know what to do with message")
   }
 
+  def failed: Receive = {
+    // the task is now finished.
+    case ("bar") => become(readyForCheckout)
+    case _ => throw new RuntimeException("Don't know what to do with message")
+  }
   // TODO: if more than one person is executing the task, do they each get separate Actors?
   // Or does the Actor track the simultaneous executions?
   // Or, perhaps, does a Task actor supervise multiple TaskExecution actors? 
+
+  def receive = {
+     case "test" => log.info("received test")
+     case _ => log.info("received unknown message")
+   }
 
 }
 

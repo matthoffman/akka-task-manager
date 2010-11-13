@@ -1,11 +1,19 @@
-This is an exercise in using Scala, actors, and Akka in particular.  So, let's start with a caveat:  I'm no expert in any
-of those things.  But as an excuse to use all three, I thought I'd try re-implementing something in a domain I'm familiar
-with.
+This is an exercise in using Scala and actors in general, and Akka in particular.  So, let's start with a caveat:  
+I'm no expert in any of those things.  But as an excuse to use all three, I thought I'd try re-implementing something 
+in a domain I'm familiar with. So this is a simple task management framework using Akka.
 
-So, this is a simple task management framework using Akka.
+Conceptually, this is just raising the level of abstraction one tier higher. This framework deals with Tasks, which 
+are discrete units of work.  Tasks can be broken down into child tasks, and those child tasks can be executed in 
+parallel or in serial, at the discresion of the parent task.  Tasks then end up being a tree -- there's a root task, 
+and any number of child tasks underneath it. 
+Typically, worker threads (which could be on the same machine, or on separate machines) poll the available tasks 
+until they find one they want to work on, and then they attempt to execute it.  In order to make sure that each task
+is executed only once at any given time, worker threads attempt to "check out" the task.  The task (represented by an 
+Actor) allows only one checkout at a time.
 
-Conceptually, this is just raising the level of abstraction another level. This framework deals with Tasks, which are
-discrete units of work.  These units of work can be made to execute in serial or parallel, and can have parents and children.
+Note: there's nothing keeping us from extending this model so that a task can be executed by several threads at once -- 
+a speculative execution model.  But for simplicity's sake, I've kept it one-to-one for the moment.
+
 
 Tasks, in this definition, have a worker (the thing that defines the work to be done), a state (ready, executing,
 complete, failed), and an arbitrary set of properties.  At the moment, I'm defining all properties as strings, for both

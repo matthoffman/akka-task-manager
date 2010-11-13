@@ -36,6 +36,7 @@ tm.out
 *.iws
 *.ipr
 *.iml
+.*.sw*
 run-codefellow
 .project
 .settings
