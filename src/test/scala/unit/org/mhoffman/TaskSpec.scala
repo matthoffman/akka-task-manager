@@ -1,16 +1,11 @@
 package unit.org.mhoffman
 
 import org.scalatest.matchers.ShouldMatchers
-import se.scalablesolutions.akka.remote.{RemoteServer, RemoteClient}
 import se.scalablesolutions.akka.actor.Actor._
-import java.util.concurrent.{TimeUnit, CyclicBarrier}
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Spec}
+import org.scalatest.{BeforeAndAfterEach, Spec}
 import se.scalablesolutions.akka.util.Logging
-import unit.test.proto.Commands.WorkerCommand
-import java.io.{InputStream, OutputStream}
-import java.net.Socket
 import org.mhoffman._
-import se.scalablesolutions.akka.actor.{ActorRegistry, ActorRef, Actor}
+import se.scalablesolutions.akka.actor.{ActorRegistry, ActorRef}
 
 /**
  *
@@ -98,7 +93,7 @@ class TaskSpec extends Spec with ShouldMatchers with BeforeAndAfterEach with Log
         actorRef ! Checkin("myNode", ExecutionSuccessful())
 
         val result = (actorRef !! GetState("myNode")).getOrElse(fail())
-        result should equal(Successful())
+        result should equal(Successful)
         actorRef.stop
       }
 
@@ -107,7 +102,7 @@ class TaskSpec extends Spec with ShouldMatchers with BeforeAndAfterEach with Log
         actorRef ! Checkin("myNode", ExecutionFailed())
 
         val result = (actorRef !! GetState("myNode")).getOrElse(fail())
-        result should equal(Failed())
+        result should equal(Failed)
         actorRef.stop
       }
 

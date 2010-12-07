@@ -4,11 +4,6 @@ package org.mhoffman
 
 import se.scalablesolutions.akka.actor.{Actor, ActorRef}
 import se.scalablesolutions.akka.actor.Actor._
-import se.scalablesolutions.akka.dispatch.{Dispatchers}
-import se.scalablesolutions.akka.remote.{RemoteClient, RemoteNode}
-import com.eaio.uuid.UUID
-import collection.immutable.{HashMap, Queue}
-
 
 /**
  * A TaskDefinition is to a class what a Task is to an object.  That is, TaskDefinition describes a task that could be
@@ -34,7 +29,6 @@ import collection.immutable.{HashMap, Queue}
  */
 
 case class TaskDefinition(
-
                                  /**
                                   * The name we'll use to identify this task.
                                   * Must be unique; we'll use this name to refer to the task and look it up from registries
@@ -80,12 +74,7 @@ case class TaskDefinition(
                                  children: List[TaskDefinition] = List()) {
   // that was all the constructor. Yeesh.
 
-
-  /**
-   * always created on initialization; no reason to expose it as an option
-   */
-  val taskDefinitionId: UUID = new UUID()
-
+  // no body at the moment.  I used to have a TaskDefinitionId here, but it doesn't really do anything.
 }
 
 object TaskDefinition {
@@ -118,10 +107,11 @@ class TaskContext(val taskActorRef: ActorRef, val myNode: String) {
 
 class Task(val taskDefinition: TaskDefinition) extends Actor {
 
+  /**the node that has this task currently checked out. This should be in a persistent map, really, of task executions or something similar. */
   var node = ""
-  // the node that has this task currently checked out. This should be in a persistent map, really, of task executions or something similar.
 
-  var state = Ready
+  /**Our current state.  We start out in "ready for checkout" mode */
+  var state: TaskState = Ready()
 
   /**the children defined in the original task definition */
   val taskDefinitionChildren = taskDefinition.children
@@ -129,9 +119,8 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
   // not sure if we want this.
   var children = List[Task]()
   // TODO: should this be ActorRefs or something?  RemoteActorRef?
-
   var childTaskIds = List[String]()
-  //
+
 
   var properties: Map[String, String] = taskDefinition.properties
 
@@ -144,7 +133,12 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
    *                         \--> failed  
    *
    * For this quick implementation, I'm ignoring retries.  I'd like to piggyback the Fault Tolerance features of Akka,
-   * but I haven't reasoned that out yet. 
+   * but I haven't reasoned that out yet.
+   *
+   *
+   * I haven't decided exactly when I want completed tasks to be deleted.  beanstalkd deletes right away.  It seems nice to have completed tasks around for
+   * querying, though.
+   *
    */
 
   /**
@@ -158,76 +152,8 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
     0
   }
 
-  /**
-   * When the task is executing, we can add children or mark the task
-   */
-
-  def checkedOut(): Receive = {
-
-    case Checkin(requestingNode, executionStatus, properties) => // check this task in
-    // if it's successful, become completed
-    // if it's not successful, become failed
-      log.info("being checked in by " + requestingNode)
-      executionStatus match {
-        case ExecutionSuccessful() =>
-          log.info("execution successful. Moving to complete status")
-          become(successful)
-
-        case ExecutionFailed() =>
-          log.info("execution failed. Moving to failed status")
-          become(failed)
-
-        case ExecutionAborted() =>
-          log.info("execution aborted. Moving back to ready status")
-          become(readyForCheckout)
-      }
-
-    case AddChild(requestingNode: String, newTD: TaskDefinition) => // add a new child task
-      log.info(requestingNode + " is adding child " + newTD)
-      addChild(newTD)
-
-    case GetChildren(requestingNode: String) =>
-      self.reply_?(children)
-
-    case GetTaskInfo(requestingNode: String) =>
-      self.reply_?(new TaskInfo(taskDefinition, properties /*, state*/)) //TODO: why is this giving me a type mismatch?
-
-    case GetState(requestingNode: String) => returnState(requestingNode, CheckedOut(node))
-    case other => throw new RuntimeException("Don't know what to do with message: " + other)
-  }
-
-  def readyForCheckout: Receive = {
-    // someone is executing the task
-    case Checkout(requestingNode: String) =>
-      log.info("being checked out by " + requestingNode)
-      this.node = requestingNode
-      become(checkedOut)
-
-    case AddChild(requestingNode: String, newTD: TaskDefinition) => // add a new child task
-      log.info(requestingNode + " is adding child " + newTD)
-      addChild(newTD)
-
-    case GetChildren(requestingNode: String) =>
-      self.reply_?(children)
-
-    case GetState(requestingNode: String) => returnState(requestingNode, Ready())
-    case other => throw new RuntimeException("Don't know what to do with message: " + other)
-  }
-
-  def successful: Receive = {
-    // the task is now finished.
-    case GetState(requestingNode: String) => returnState(requestingNode, Successful())
-    case other => throw new RuntimeException("Don't know what to do with message " + other)
-  }
-
-  def failed: Receive = {
-    // the task is now finished.
-    case GetState(requestingNode: String) => returnState(requestingNode, Failed())
-    case other => throw new RuntimeException("Don't know what to do with message " + other)
-  }
-
-  def returnState(requestingNode: String, taskState: TaskState): Unit = {
-    log.info("Node " + requestingNode + " asked for our state (it's '" + taskState.getClass.getSimpleName + "')")
+  private def returnState(requestingNode: String, taskState: TaskState): Unit = {
+    log.debug("Node " + requestingNode + " asked for our state (it's '" + taskState.getClass.getSimpleName + "')")
     self.reply_?(taskState)
   }
 
@@ -235,9 +161,76 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
   // Or does the Actor track the simultaneous executions?
   // Or, perhaps, does a Task actor supervise multiple TaskExecution actors? 
 
-  // we start out in "ready for checkout" mode
+  private def checkinTask(requestingNode: String, executionStatus: ExecutionStatus): TaskState = {
+    // check this task in
+    // if it's successful, become completed
+    // if it's not successful, become failed
+    log.info("being checked in by " + requestingNode)
+    executionStatus match {
+      case ExecutionSuccessful() =>
+        log.info("execution successful. Moving to complete status")
+        state = Successful
 
-  def receive = readyForCheckout
+      case ExecutionFailed() =>
+        log.info("execution failed. Moving to failed status")
+        state = Failed
+
+      case ExecutionAborted() =>
+        log.info("execution aborted. Moving back to ready status")
+        state = Ready()
+    }
+    state
+  }
+
+  private def checkoutTask(requestingNode: String): TaskState = {
+    log.info("being checked out by " + requestingNode)
+    this.node = requestingNode
+    state = CheckedOut(requestingNode)
+    state
+  }
+
+  def receive = {
+
+    /*------------------------------------------------
+     * These always work, regardless of current state
+     *------------------------------------------------*/
+    case GetChildren(requestingNode: String) => self.reply_?(children)
+
+    case GetTaskInfo(requestingNode: String) =>
+      self.reply_?(new TaskInfo(taskDefinition, properties /*, state*/)) //TODO: why is this giving me a type mismatch?
+
+    case GetState(requestingNode: String) => returnState(requestingNode, state)
+
+    /*------------------------------------------------
+     * These only work in particular states
+     *------------------------------------------------*/
+
+    case Checkin(requestingNode, executionStatus, properties) =>
+      if (state != CheckedOut(requestingNode)) {
+        self.reply_?(NotAllowed("Task is not checked out"))
+      } else {
+        state = checkinTask(requestingNode, executionStatus)
+      }
+
+    // someone is executing the task
+    case Checkout(requestingNode: String) =>
+      if (state != Ready()) {
+        self.reply_?(NotAllowed("Task is " + state))
+      } else {
+        state = checkoutTask(requestingNode)
+      }
+
+    case AddChild(requestingNode: String, newTD: TaskDefinition) => // add a new child task
+      if (state.isInstanceOf[TerminalState]) {
+        self.reply_?(NotAllowed("Can't add a child to a task in terminal state (task is " + state + ")"))
+      } else {
+        log.info(requestingNode + " is adding child " + newTD)
+        addChild(newTD)
+      }
+
+    case other =>
+      self.reply_?(BadMessage(other))
+  }
 
 }
 
@@ -249,44 +242,48 @@ case class TaskInfo(taskDefinition: TaskDefinition, properties: Map[String, Stri
  * We do track the node doing the checkout, though.
  */
 
-case class Checkout(val requestingNode: String)
+sealed abstract class TaskMessage()
+
+
+case class Checkout(val requestingNode: String) extends TaskMessage
 
 /**
  *  Add a child to this task
  */
 
-case class AddChild(val requestingNode: String, val taskDefinition: TaskDefinition)
+case class AddChild(val requestingNode: String, val taskDefinition: TaskDefinition) extends TaskMessage
 
 /**
  *  Get this task's children
  */
 
-case class GetChildren(val requestingNode: String)
+case class GetChildren(val requestingNode: String) extends TaskMessage
 
 /**
  *  Get information about this task
  */
 
-case class GetTaskInfo(val requestingNode: String)
+case class GetTaskInfo(val requestingNode: String) extends TaskMessage
 
 
 /**
  * Keep the task checked out, but update its properties 
  */
 
-case class Update(val requestingNode: String, val properties: Map[String, String])
+case class Update(val requestingNode: String, val properties: Map[String, String]) extends TaskMessage
 
 /**
  *  Check this task in.  Its next state depends on the ExecutionStatus
  */
 
-case class Checkin(val requestingNode: String, val executionStatus: ExecutionStatus, val properites: Map[String, String] = Map())
+case class Checkin(val requestingNode: String, val executionStatus: ExecutionStatus, val properites: Map[String, String] = Map()) extends TaskMessage
 
 /**
  *  Get the current state of this task
  */
 
-case class GetState(val requestingNode: String)
+case class GetState(val requestingNode: String) extends TaskMessage
+
 
 /**
  *  The current state of the task
@@ -296,13 +293,18 @@ sealed abstract class TaskState()
 
 case class Ready() extends TaskState
 
-case class CheckedOut(node: String) extends TaskState
+case class CheckedOut(node: String) extends TaskState {
+  override def toString = "CheckedOut by " + node
+}
+
 
 // these two will eventually have more detail in them -- when they were executed and by whom, for example.
 
-case class Failed() extends TaskState
+sealed abstract class TerminalState() extends TaskState
 
-case class Successful() extends TaskState
+case object Failed extends TerminalState
+
+case object Successful extends TerminalState
 
 /**
  *  This could be merged with TaskState, above, and the value named "nextTaskState". 
@@ -323,6 +325,18 @@ case class ExecutionFailed() extends ExecutionStatus
 // This status may be removed entirely in the future; it has a nebulous use case.
 
 case class ExecutionAborted() extends ExecutionStatus
+
+
+abstract class ErrorMessage(val message: String)
+
+case class NotAllowed(override val message: String) extends ErrorMessage(message)
+
+case class NotFound(taskId: String) extends ErrorMessage("Task " + taskId + " not found")
+
+case class BadMessage(requestMessage: Any) extends ErrorMessage("Unknown message " + requestMessage)
+
+case class InternalError(override val message: String) extends ErrorMessage(message)
+
 
 /*
  * The other way to accomplish this would be to store tasks in a persistent map, with one actor serving as gatekeeper to the map.
