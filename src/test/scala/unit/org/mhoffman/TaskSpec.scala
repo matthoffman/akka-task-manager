@@ -21,6 +21,7 @@ class TaskSpec extends Spec with ShouldMatchers with BeforeAndAfterEach with Log
     ActorRegistry.shutdownAll
   }
 
+
   describe("A Task") {
 
     describe("when it is first started ") {
@@ -129,26 +130,79 @@ class TaskSpec extends Spec with ShouldMatchers with BeforeAndAfterEach with Log
 
     }
 
-    describe("should allow children") {
-      it("when checked out") {
+    describe("when checked out") {
+      it("should allow children") {
         val actorRef = checkoutTask
-        actorRef ! AddChild("myNode", TaskDefinition(name = "child", worker = {
-          taskContext => log.info("child task executing")
-        }))
 
-
-        actorRef.stop
+        addChildAndValidate(actorRef)
       }
     }
+    describe("when not checked out") {
+      it("should allow children") {
+        val actorRef = createAndStartTask
+        val result = actorRef !! GetState("myNode")
+        result should equal(Some(Ready()))
+
+        addChildAndValidate(actorRef)
+
+      }
+    }
+
+    describe("when in SUCCESSFUL state") {
+      it("shouldn't allow children") {
+        fail("not yet implemented")
+      }
+    }
+
+    describe("when in FAILED state") {
+      it("shouldn't allow children") {
+        fail("not yet implemented")
+      }
+    }
+
+  }
+
+  def createAndStartTask: ActorRef = {
+    val actorRef = actorOf(new Task(createTaskDefinition))
+    actorRef.start
+    actorRef
   }
 
   def checkoutTask(): ActorRef = {
-    val actorRef = actorOf(new Task(createTaskDefinition))
-    actorRef.start
+    val actorRef: ActorRef = createAndStartTask
     actorRef ! Checkout("myNode")
 
     val result = actorRef !! GetState("myNode")
     result should equal(Some(CheckedOut("myNode")))
     actorRef
+  }
+
+
+  private def validateChildList(actorRef: ActorRef, previousChildList: List[Task], newTaskDef: TaskDefinition): List[Task] = {
+    // validate that child was added
+    val newChildren = (actorRef !! GetChildren("myNode")).getOrElse(fail()).asInstanceOf[List[Task]]
+    newChildren should equal(previousChildList += new Task(newTaskDef))
+    newChildren
+  }
+
+  def addChildAndValidate(actorRef: ActorRef): Unit = {
+    // first, make sure child list is empty
+    val startingChildren: List[Task] = (actorRef !! GetChildren("myNode")).getOrElse(fail()).asInstanceOf[List[Task]]
+    children should equal(List())
+
+    val newTaskDef = TaskDefinition(name = "child", worker = {
+      taskContext => log.info("child task executing")
+    })
+
+    actorRef ! AddChild("myNode", newTaskDef)
+    val children: List[Task] = validateChildList(actorRef, startingChildren, newTaskDef)
+
+    // now try another
+    actorRef ! AddChild("myNode", newTaskDef)
+    val newerChildren: List[Task] = validateChildList(actorRef, children, newTaskDef)
+
+
+
+    actorRef.stop
   }
 }

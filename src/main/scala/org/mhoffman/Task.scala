@@ -67,6 +67,8 @@ case class TaskDefinition(
 
                                  executeChildrenInParallel: Boolean = true,
 
+                                 failOnChildFailure: Boolean = true,
+
                                  /**
                                   * In case this taskDefinition is defined with children off-the-bat.  If you don't define them up front in the
                                   * task definition, they can still be added later during runtime.
@@ -112,6 +114,12 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
 
   /**Our current state.  We start out in "ready for checkout" mode */
   var state: TaskState = Ready()
+
+  /*
+  var checkouts = 0L
+  var checkins = 0L
+  var errors = 0L
+  */
 
   /**the children defined in the original task definition */
   val taskDefinitionChildren = taskDefinition.children
@@ -165,6 +173,7 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
     // check this task in
     // if it's successful, become completed
     // if it's not successful, become failed
+    //TODO: pass the checkin through some pre/post hooks
     log.info("being checked in by " + requestingNode)
     executionStatus match {
       case ExecutionSuccessful() =>
@@ -179,11 +188,13 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
         log.info("execution aborted. Moving back to ready status")
         state = Ready()
     }
+
     state
   }
 
   private def checkoutTask(requestingNode: String): TaskState = {
     log.info("being checked out by " + requestingNode)
+    //TODO: pass the checkout through some pre/post hooks
     this.node = requestingNode
     state = CheckedOut(requestingNode)
     state
@@ -243,7 +254,6 @@ case class TaskInfo(taskDefinition: TaskDefinition, properties: Map[String, Stri
  */
 
 sealed abstract class TaskMessage()
-
 
 case class Checkout(val requestingNode: String) extends TaskMessage
 
