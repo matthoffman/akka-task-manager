@@ -181,7 +181,7 @@ class TaskSpec extends Spec with ShouldMatchers with BeforeAndAfterEach with Log
   private def validateChildList(actorRef: ActorRef, previousChildList: List[Task], newTaskDef: TaskDefinition): List[Task] = {
     // validate that child was added
     val newChildren = (actorRef !! GetChildren("myNode")).getOrElse(fail()).asInstanceOf[List[Task]]
-    newChildren should equal(previousChildList += new Task(newTaskDef))
+    newChildren should equal(previousChildList + new Task(newTaskDef))
     newChildren
   }
 
