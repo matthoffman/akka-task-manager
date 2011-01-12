@@ -77,3 +77,8 @@ option that I know of.  But ideally we could offer some pluggable options.
 In the meantime, though, it is not a full-on Map-Reduce framework. With a bit of extension, algorithms like MapReduce 
 could be modeled with this framework. 
 
+Building
+--------
+
+This project uses uses SBT to build.  Follow the instructions at http://code.google.com/p/simple-build-tool/wiki/Setup 
+if you do not have SBT installed.  Once installed, simply run "sbt test" to run all tests. 
