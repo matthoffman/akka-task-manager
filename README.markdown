@@ -14,9 +14,9 @@ are discrete units of work.  For ours purposes, Tasks are defined in the followi
 * Each Task has a "worker", which defines the work to be done.  In this implementation, that's a block. 
 * Each Task has a state, which is one of "ready", "executing", "successful", or "failed".
 * Each Task can have children, which are themselves Tasks.  The parent Task specifies the following things about its children:
-  ** can child tasks be executed before the parent completes? 
-  ** should the children be executed in parallel (with one another), or in serial?
-  ** does a failure in a child task equal a failure in this task?
+  1. can child tasks be executed before the parent completes? 
+  2. should the children be executed in parallel (with one another), or in serial?
+  3. does a failure in a child task equal a failure in this task?
 * Each Task can have an arbitrary set of properties.  At the moment, I'm defining all properties as strings, for both
 * keys and values, to avoid dealing with serialization.  But it seems reasonable that we could piggyback Akka's serialization
 * framework for properties, so that we could attach more complex data to Task objects.
