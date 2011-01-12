@@ -1,6 +1,8 @@
-h1. Akka Task Framework
+Akka Task Framework
+============
 
-h2. Background
+Background
+----------
 
 This is an exercise in using Scala, actors, and Akka.  So, let's start with a caveat:  
 I'm no expert in any of those things.  But as an excuse to use all Scala, actors, and Akka, I thought I'd try 
@@ -33,13 +35,16 @@ check out).
 In this implementation, each task is represented by an Actor. They could be represented in a persistent map instead, 
 with access to the whole map guarded by an actor.  I'm open to suggestions. 
 
-h2. Limitations
+Limitations
+-----------
+
 This particular implementation allows only one checkout at a time.  There's nothing keeping us from extending this 
 model so that a task can be executed by several threads at once -- a speculative execution model.  But for 
 simplicity's sake, I've kept it one-to-one for the moment.
 
 
-h2. Example
+Example
+-------
 
 (code example coming; for now, this is a theoretical thought example.  See the tests for where we are with the actual
 code thus far)
