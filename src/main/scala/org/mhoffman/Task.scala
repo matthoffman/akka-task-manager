@@ -16,7 +16,9 @@ import se.scalablesolutions.akka.actor.Actor._
  * are the cleanest way to do this ( http://villane.wordpress.com/2010/03/05/taking-advantage-of-scala-2-8-replacing-the-builder/ ).
  * And the examples of "typesafe builder patterns in Scala" that Google returned were abysmally ugly.
  *
- * Perhaps TaskContext is what's handed into Workers, and "addChild" sends a message back to the service, which in turn
+ *
+ * Work-in-progress notes:
+ * Perhaps we hand Workers a "TaskContext", with an "addChild" method which sends a message back to the service, which in turn
  * sends a message back to the taskContext telling it to add a local task -- so the TaskContext (or task within) is really
  * a local eventually-consistent copy of the authoritative TaskGraph's children.
  *
@@ -74,6 +76,7 @@ case class TaskDefinition(
                                   * task definition, they can still be added later during runtime.
                                   */
                                  children: List[TaskDefinition] = List()) {
+
   // that was all the constructor. Yeesh.
 
   // no body at the moment.  I used to have a TaskDefinitionId here, but it doesn't really do anything.
@@ -151,7 +154,7 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
 
   /**
    * Add a child task.
-   * Right now, this is only possible when the task is checked out -- we're ensuring that through the "becomes" state-transition construct.
+   * Right now, this is only possible when the task is checked out.
    * Conceptually, I'm not necessarily sure we need this restriction, but I haven't reasoned through all the implications
    * of adding a child to task that you haven't checked out. 
    */
@@ -205,17 +208,20 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
     /*------------------------------------------------
      * These always work, regardless of current state
      *------------------------------------------------*/
+    // you can always ask about this task's children
     case GetChildren(requestingNode: String) => self.reply_?(children)
 
+    // you can always ask for the summary details of this task
     case GetTaskInfo(requestingNode: String) =>
       self.reply_?(new TaskInfo(taskDefinition, properties /*, state*/)) //TODO: why is this giving me a type mismatch?
 
+    // you can always ask about this task's current state
     case GetState(requestingNode: String) => returnState(requestingNode, state)
 
     /*------------------------------------------------
      * These only work in particular states
      *------------------------------------------------*/
-
+    // you can only checkin when a.) the task is currently checked out, and b.) you're the one that checked it out.
     case Checkin(requestingNode, executionStatus, properties) =>
       if (state != CheckedOut(requestingNode)) {
         self.reply_?(NotAllowed("Task is not checked out"))
@@ -223,7 +229,7 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
         state = checkinTask(requestingNode, executionStatus)
       }
 
-    // someone is executing the task
+    // you can only checkout when the task is currently in "Ready" state
     case Checkout(requestingNode: String) =>
       if (state != Ready()) {
         self.reply_?(NotAllowed("Task is " + state))
@@ -231,6 +237,7 @@ class Task(val taskDefinition: TaskDefinition) extends Actor {
         state = checkoutTask(requestingNode)
       }
 
+    // you can only add a child when you currently have the task checked out
     case AddChild(requestingNode: String, newTD: TaskDefinition) => // add a new child task
       if (state.isInstanceOf[TerminalState]) {
         self.reply_?(NotAllowed("Can't add a child to a task in terminal state (task is " + state + ")"))
@@ -255,44 +262,44 @@ case class TaskInfo(taskDefinition: TaskDefinition, properties: Map[String, Stri
 
 sealed abstract class TaskMessage()
 
-case class Checkout(val requestingNode: String) extends TaskMessage
+case class Checkout(requestingNode: String) extends TaskMessage
 
 /**
  *  Add a child to this task
  */
 
-case class AddChild(val requestingNode: String, val taskDefinition: TaskDefinition) extends TaskMessage
+case class AddChild(requestingNode: String, taskDefinition: TaskDefinition) extends TaskMessage
 
 /**
  *  Get this task's children
  */
 
-case class GetChildren(val requestingNode: String) extends TaskMessage
+case class GetChildren(requestingNode: String) extends TaskMessage
 
 /**
  *  Get information about this task
  */
 
-case class GetTaskInfo(val requestingNode: String) extends TaskMessage
+case class GetTaskInfo(requestingNode: String) extends TaskMessage
 
 
 /**
  * Keep the task checked out, but update its properties 
  */
 
-case class Update(val requestingNode: String, val properties: Map[String, String]) extends TaskMessage
+case class Update(requestingNode: String, properties: Map[String, String]) extends TaskMessage
 
 /**
  *  Check this task in.  Its next state depends on the ExecutionStatus
  */
 
-case class Checkin(val requestingNode: String, val executionStatus: ExecutionStatus, val properites: Map[String, String] = Map()) extends TaskMessage
+case class Checkin(requestingNode: String, executionStatus: ExecutionStatus, properites: Map[String, String] = Map()) extends TaskMessage
 
 /**
  *  Get the current state of this task
  */
 
-case class GetState(val requestingNode: String) extends TaskMessage
+case class GetState(requestingNode: String) extends TaskMessage
 
 
 /**
@@ -349,7 +356,7 @@ case class InternalError(override val message: String) extends ErrorMessage(mess
 
 
 /*
- * The other way to accomplish this would be to store tasks in a persistent map, with one actor serving as gatekeeper to the map.
+ * The other way to accomplish this would be to make tasks value objects, not individual actors, and store them in a persistent map, with one actor serving as gatekeeper to the map.
  *
  * Some notes on persistent datastructures:
  * (copied from Akka docs) 

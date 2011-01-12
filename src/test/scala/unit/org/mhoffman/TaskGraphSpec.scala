@@ -6,13 +6,28 @@ import org.scalatest.{BeforeAndAfterEach, Spec}
 import se.scalablesolutions.akka.util.Logging
 import org.mhoffman._
 import se.scalablesolutions.akka.actor.{ActorRegistry, ActorRef}
-import actors.Actor
 
 /**
  *
  */
 
 class TaskGraphSpec extends Spec with ShouldMatchers with BeforeAndAfterEach with Logging with TaskDefinitionCreator {
+
+  /**
+   * These definitions for testGraph, testgraph2, and testgraph3 were originally written as experiments in the simplest, cleanest ways to
+   * define a task hierarchy for test purposes.
+   * My assumptions for this test hierarchy are:
+   * 1.) some tasks will have children, some won't
+   * 2.) tasks should be able to specify a "delay" value -- that is the # of milliseconds that the task will pause before being considered complete.
+   *  This is to represent the time spent working on that task.
+   * 3.) some tasks will throw an exception.  We can define what exception they throw upfront.
+   *
+   *
+   * Below we have two ways of specifying a task hierarchy.  The first uses a case class called "T", which takes optional
+   * named parameters for delay, children, and an exception to throw.  The second uses several different case classes,
+   * one for a "delay" task ("D"), one for a "failing" task ("F"), and one for a "Normal" task ("N") -- a task without a delay.
+   */
+
 
   val testGraph = T(delay = 10, children = List(
     T(delay = 100),
@@ -27,6 +42,10 @@ class TaskGraphSpec extends Spec with ShouldMatchers with BeforeAndAfterEach wit
   )
 
   // experimenting with different ways to specify.  I think this looks a little cleaner.
+  // D = a task with a delay.  Delay specified in milliseconds.
+  // F = a task which will fail (the exception it will throw is passed as an argument
+  // N = a "normal" task (no delay, no failures)
+  // any of these tasks can take optional children.
   val testGraph2 =
     D(10,
       D(100),
